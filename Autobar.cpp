@@ -21,6 +21,39 @@ HWINEVENTHOOK g_hHookLocation = NULL;
 NOTIFYICONDATA nid = {};
 HWND g_hwndApp = NULL;
 
+void CheckAndPromptStartup() {
+    HKEY hKey;
+    const char* subKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    const char* valueName = "AutoBar";
+
+    // Check if already registered
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, subKey, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        char path[MAX_PATH];
+        DWORD pathLen = sizeof(path);
+        LONG res = RegQueryValueEx(hKey, valueName, NULL, NULL, (LPBYTE)path, &pathLen);
+        RegCloseKey(hKey);
+        if (res == ERROR_SUCCESS) {
+            return; // Already enabled, skip prompt
+        }
+    }
+
+    // Ask user if they want startup enabled
+    int msgBoxID = MessageBox(NULL, 
+        "Would you like AutoBar to run automatically when Windows starts?", 
+        "AutoBar Startup Setup", 
+        MB_ICONQUESTION | MB_YESNO);
+
+    if (msgBoxID == IDYES) {
+        char exePath[MAX_PATH];
+        GetModuleFileName(NULL, exePath, MAX_PATH);
+
+        if (RegCreateKeyEx(HKEY_CURRENT_USER, subKey, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+            RegSetValueEx(hKey, valueName, 0, REG_SZ, (LPBYTE)exePath, (DWORD)(strlen(exePath) + 1));
+            RegCloseKey(hKey);
+        }
+    }
+}
+
 void ApplyTaskbarState(bool showOverlay, bool stayVisible = false, int popupSetting = 2) {
     if (!g_isActive) {
         showOverlay = true;
@@ -237,6 +270,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Check and prompt to configure run-on-startup on execution
+    CheckAndPromptStartup();
+
     const char CLASS_NAME[] = "TaskbarHiderTrayApp";
     WNDCLASS wc = { };
     wc.lpfnWndProc = WindowProc;
@@ -244,7 +280,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpszClassName = CLASS_NAME;
     RegisterClass(&wc);
 
-    g_hwndApp = CreateWindowEx(0, CLASS_NAME, "TaskbarHider", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInstance, NULL);
+    g_hwndApp = CreateWindowEx(0, CLASS_NAME, "AutoBar", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInstance, NULL);
 
     nid.cbSize = sizeof(NOTIFYICONDATA);
     nid.hWnd = g_hwndApp;
@@ -252,7 +288,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
     nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-    strcpy(nid.szTip, "Maximized Window Taskbar Hider");
+    strcpy(nid.szTip, "AutoBar - Taskbar Hider");
     Shell_NotifyIcon(NIM_ADD, &nid);
 
     HookEvents();
