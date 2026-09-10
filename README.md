@@ -1,12 +1,16 @@
 # AutoBar
 
-A lightweight C++ system tray application that automatically controls your Windows taskbar behavior when working with maximized windows, giving you a completely immersive, distraction-free workspace. Includes fine-grained control over popup modes and desktop persistence.
+A lightweight C++ system tray application that automatically controls your Windows taskbar behavior when working with maximized windows, giving you a completely immersive, distraction-free workspace. Includes fine-grained control over popup modes, desktop persistence, and seamless startup configuration.
 
 ---
 
 ## Version History & Changelog
 
-### `v1.3` — Clean Desktop & Persistence Update (Current)
+### `v1.4` — Startup Integration Update (Current)
+* **New Feature:** Added an automated startup configuration prompt. When launching the application for the first time, it checks the Windows Registry and asks if you would like AutoBar to run automatically on Windows startup.
+* **Refinement:** Added robust registry key management (`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`) for seamless background persistence.
+
+### `v1.3` — Clean Desktop & Persistence Update
 * **New Feature:** Added the **"Keep Taskbar on Desktop"** tray option. When enabled, the taskbar stays permanently visible whenever you are on the desktop, ignoring auto-hide restrictions.
 * **Refinement:** Unified all state checks to prevent taskbar flickering or unwanted pop-ups when switching between tabs.
 * **States Supported:** Fully operational **On**, **Off**, and **Auto** modes.
@@ -34,4 +38,4 @@ A lightweight C++ system tray application that automatically controls your Windo
 Compile the source code using any standard C++ compiler (like MinGW or Visual Studio) linked with the Windows API and Shell libraries:
 
 ```bash
-g++ main.cpp -o AutoBar.exe -lshell32 -luser32
+g++ autobar.cpp -o AutoBar.exe -lshell32 -luser32
