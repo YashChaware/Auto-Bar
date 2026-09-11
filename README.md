@@ -6,6 +6,11 @@ A lightweight C++ system tray application that automatically controls your Windo
 
 ## Version History & Changelog
 
+### `v1.5` — Smart Auto Hover & Focus Hierarchy Update (Current)
+* **New Feature:** In **Auto** mode, non-maximized windows reveal the taskbar for 3 seconds upon focus or launch, and then automatically hide. Hovering the bottom screen edge triggers a fresh 3-second reveal.
+* **Optimization:** Streamlined execution flow and event hooks to maintain near-zero CPU and memory usage.
+* **Refinement:** Unified logic hierarchy ensuring **"Keep Taskbar on Desktop"** strictly overrides all popup modes whenever the desktop is active.
+
 ### `v1.4` — Startup Integration Update (Current)
 * **New Feature:** Added an automated startup configuration prompt. When launching the application for the first time, it checks the Windows Registry and asks if you would like AutoBar to run automatically on Windows startup.
 * **Refinement:** Added robust registry key management (`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`) for seamless background persistence.

@@ -15,6 +15,7 @@ int g_popupSetting = 2; // 0 = Off, 1 = On, 2 = Auto
 bool g_keepTaskbarOnDesktop = true; 
 bool g_isCurrentlyHidden = false;
 bool g_isStateInitialized = false;
+int g_tempShowTicks = 0; // Countdown timer for temporary reveals (12 ticks = 3 sec)
 
 HWINEVENTHOOK g_hHookForeground = NULL;
 HWINEVENTHOOK g_hHookLocation = NULL;
@@ -26,18 +27,16 @@ void CheckAndPromptStartup() {
     const char* subKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
     const char* valueName = "AutoBar";
 
-    // Check if already registered
     if (RegOpenKeyEx(HKEY_CURRENT_USER, subKey, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         char path[MAX_PATH];
         DWORD pathLen = sizeof(path);
         LONG res = RegQueryValueEx(hKey, valueName, NULL, NULL, (LPBYTE)path, &pathLen);
         RegCloseKey(hKey);
         if (res == ERROR_SUCCESS) {
-            return; // Already enabled, skip prompt
+            return; // Already registered
         }
     }
 
-    // Ask user if they want startup enabled
     int msgBoxID = MessageBox(NULL, 
         "Would you like AutoBar to run automatically when Windows starts?", 
         "AutoBar Startup Setup", 
@@ -115,8 +114,9 @@ void CheckAndToggleTaskbar() {
     }
 
     HWND hwnd = GetForegroundWindow();
-    bool isOnDesktop = false;
 
+    // 1. DESKTOP OVERRIDE CHECK
+    bool isOnDesktop = false;
     if (!hwnd) {
         isOnDesktop = true;
     } else {
@@ -129,23 +129,43 @@ void CheckAndToggleTaskbar() {
 
     if (isOnDesktop && g_keepTaskbarOnDesktop) {
         ApplyTaskbarState(true, true, g_popupSetting);
+        g_tempShowTicks = 0;
         return;
     }
 
-    bool isForegroundMaximized = false;
+    // 2. CHECK MAXIMIZED STATE
+    bool isMaximized = false;
     if (hwnd) {
         char className[256];
         GetClassName(hwnd, className, sizeof(className));
-        isForegroundMaximized = (IsWindowVisible(hwnd) && IsZoomed(hwnd) && !IsIconic(hwnd));
-        if (isForegroundMaximized) {
-            if (strcmp(className, "Shell_TrayWnd") == 0 || strcmp(className, "Windows.UI.Core.CoreWindow") == 0) {
-                isForegroundMaximized = false;
-            }
+        isMaximized = (IsWindowVisible(hwnd) && IsZoomed(hwnd) && !IsIconic(hwnd));
+        if (strcmp(className, "Shell_TrayWnd") == 0 || strcmp(className, "Windows.UI.Core.CoreWindow") == 0) {
+            isMaximized = false;
         }
     }
 
-    bool showOverlay = !isForegroundMaximized;
-    ApplyTaskbarState(showOverlay, false, g_popupSetting);
+    // 3. POPUP MODES
+    if (g_popupSetting == 0) {
+        // Mode: OFF (Strictly force-hidden)
+        ApplyTaskbarState(false, false, 0);
+        g_tempShowTicks = 0;
+    } 
+    else if (g_popupSetting == 1) {
+        // Mode: ON (Native auto-hide, hover always enabled)
+        ApplyTaskbarState(true, false, 1);
+        g_tempShowTicks = 0;
+    } 
+    else if (g_popupSetting == 2) {
+        // Mode: AUTO
+        if (isMaximized) {
+            ApplyTaskbarState(false, false, 2);
+            g_tempShowTicks = 0;
+        } else {
+            // Non-Maximized: Show for 3 seconds, then automatically hide
+            ApplyTaskbarState(true, false, 2);
+            g_tempShowTicks = 12; // 12 * 250ms = 3 seconds
+        }
+    }
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, 
@@ -173,41 +193,35 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         case WM_TIMER:
             if (wParam == ID_TIMER_CHECK && g_isActive) {
-                HWND fgHwnd = GetForegroundWindow();
-                bool isOnDesktop = !fgHwnd;
-                if (fgHwnd) {
-                    char className[256];
-                    GetClassName(fgHwnd, className, sizeof(className));
-                    if (strcmp(className, "Progman") == 0 || strcmp(className, "WorkerW") == 0) {
-                        isOnDesktop = true;
+                // Handle 3-second temporary reveal countdown
+                if (g_tempShowTicks > 0) {
+                    g_tempShowTicks--;
+                    if (g_tempShowTicks == 0) {
+                        ApplyTaskbarState(false, false, g_popupSetting);
                     }
-                }
-
-                if (isOnDesktop && g_keepTaskbarOnDesktop) {
-                    HWND trayMain = FindWindow("Shell_TrayWnd", NULL);
-                    if (trayMain && !IsWindowVisible(trayMain)) {
-                        ShowWindow(trayMain, SW_SHOW);
-                    }
-                    return 0;
-                }
-
-                if (g_popupSetting == 0 || g_popupSetting == 2) {
+                } 
+                // If taskbar is hidden, check hover edge for AUTO mode
+                else if (g_popupSetting == 2 && g_isCurrentlyHidden) {
+                    HWND fgHwnd = GetForegroundWindow();
+                    bool isMaximized = false;
                     if (fgHwnd) {
-                        bool isMax = (IsWindowVisible(fgHwnd) && IsZoomed(fgHwnd) && !IsIconic(fgHwnd));
-                        if (isMax) {
-                            HWND trayMain = FindWindow("Shell_TrayWnd", NULL);
-                            if (trayMain && IsWindowVisible(trayMain)) {
-                                POINT pt;
-                                GetCursorPos(&pt);
-                                RECT rc;
-                                GetWindowRect(trayMain, &rc);
-                                if (!PtInRect(&rc, pt)) {
-                                    ShowWindow(trayMain, SW_HIDE);
-                                    HWND traySec = FindWindow("Shell_SecondaryTrayWnd", NULL);
-                                    if (traySec) ShowWindow(traySec, SW_HIDE);
-                                    g_isCurrentlyHidden = true;
-                                }
-                            }
+                        char className[256];
+                        GetClassName(fgHwnd, className, sizeof(className));
+                        isMaximized = (IsWindowVisible(fgHwnd) && IsZoomed(fgHwnd) && !IsIconic(fgHwnd));
+                        if (strcmp(className, "Shell_TrayWnd") == 0 || strcmp(className, "Windows.UI.Core.CoreWindow") == 0) {
+                            isMaximized = false;
+                        }
+                    }
+
+                    // Only allow hover popups if active window is NOT maximized
+                    if (!isMaximized) {
+                        POINT pt;
+                        GetCursorPos(&pt);
+                        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+                        if (pt.y >= screenHeight - 5) {
+                            ApplyTaskbarState(true, false, 2);
+                            g_tempShowTicks = 12; // Pop up for 3 seconds, then hide again
                         }
                     }
                 }
@@ -270,7 +284,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    // Check and prompt to configure run-on-startup on execution
     CheckAndPromptStartup();
 
     const char CLASS_NAME[] = "TaskbarHiderTrayApp";
