@@ -6,6 +6,11 @@ A lightweight C++ system tray application that automatically controls your Windo
 
 ## Version History & Changelog
 
+### `v1.6` — Multi-Window Detection & Fullscreen Support (Current)
+* **New Feature:** Replaced single-window tracking with global window enumeration (`EnumWindows`). Auto mode now correctly hides the taskbar if *any* open window on the system is maximized or fullscreen, not just the active foreground window.
+* **New Feature:** Added robust monitor-boundary calculation to properly detect borderless fullscreen applications (e.g., games, media players).
+* **Refinement:** Strict Auto logic updated. When no open windows are maximized or consuming the screen space, the taskbar stays strictly visible, eliminating unnecessary auto-hiding on an empty desktop.
+
 ### `v1.5` — Smart Auto Hover & Focus Hierarchy Update (Current)
 * **New Feature:** In **Auto** mode, non-maximized windows reveal the taskbar for 3 seconds upon focus or launch, and then automatically hide. Hovering the bottom screen edge triggers a fresh 3-second reveal.
 * **Optimization:** Streamlined execution flow and event hooks to maintain near-zero CPU and memory usage.

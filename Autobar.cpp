@@ -15,7 +15,7 @@ int g_popupSetting = 2; // 0 = Off, 1 = On, 2 = Auto
 bool g_keepTaskbarOnDesktop = true; 
 bool g_isCurrentlyHidden = false;
 bool g_isStateInitialized = false;
-int g_tempShowTicks = 0; // Countdown timer for temporary reveals (12 ticks = 3 sec)
+int g_tempShowTicks = 0; // Countdown timer for temporary reveals
 
 HWINEVENTHOOK g_hHookForeground = NULL;
 HWINEVENTHOOK g_hHookLocation = NULL;
@@ -32,9 +32,7 @@ void CheckAndPromptStartup() {
         DWORD pathLen = sizeof(path);
         LONG res = RegQueryValueEx(hKey, valueName, NULL, NULL, (LPBYTE)path, &pathLen);
         RegCloseKey(hKey);
-        if (res == ERROR_SUCCESS) {
-            return; // Already registered
-        }
+        if (res == ERROR_SUCCESS) return;
     }
 
     int msgBoxID = MessageBox(NULL, 
@@ -65,7 +63,7 @@ void ApplyTaskbarState(bool showOverlay, bool stayVisible = false, int popupSett
     HWND trayMain = abd.hWnd;
     HWND traySec = FindWindow("Shell_SecondaryTrayWnd", NULL);
 
-    if (stayVisible) {
+    if (stayVisible || showOverlay) {
         abd.lParam = ABS_ALWAYSONTOP;
         SHAppBarMessage(ABM_SETSTATE, &abd);
         if (trayMain) {
@@ -84,27 +82,61 @@ void ApplyTaskbarState(bool showOverlay, bool stayVisible = false, int popupSett
     abd.lParam = ABS_AUTOHIDE;
     SHAppBarMessage(ABM_SETSTATE, &abd);
 
-    if (showOverlay) {
-        if (trayMain) {
-            ShowWindow(trayMain, SW_SHOW);
-            SetWindowPos(trayMain, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-        }
-        if (traySec) {
-            ShowWindow(traySec, SW_SHOW);
-            SetWindowPos(traySec, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-        }
-        g_isCurrentlyHidden = false;
+    if (popupSetting == 1) {
+        if (trayMain) ShowWindow(trayMain, SW_SHOW);
+        if (traySec) ShowWindow(traySec, SW_SHOW);
     } else {
-        if (popupSetting == 1) {
-            if (trayMain) ShowWindow(trayMain, SW_SHOW);
-            if (traySec) ShowWindow(traySec, SW_SHOW);
-        } else {
-            if (trayMain) ShowWindow(trayMain, SW_HIDE);
-            if (traySec) ShowWindow(traySec, SW_HIDE);
-        }
-        g_isCurrentlyHidden = true;
+        if (trayMain) ShowWindow(trayMain, SW_HIDE);
+        if (traySec) ShowWindow(traySec, SW_HIDE);
     }
+    g_isCurrentlyHidden = true;
     g_isStateInitialized = true;
+}
+
+struct EnumWindowData {
+    bool hasMaxOrFullscreen = false;
+};
+
+// Callback to check if ANY open window is maximized or in fullscreen
+BOOL CALLBACK CheckOpenWindowsProc(HWND hwnd, LPARAM lParam) {
+    EnumWindowData* data = (EnumWindowData*)lParam;
+
+    if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
+
+    char className[256];
+    GetClassName(hwnd, className, sizeof(className));
+
+    // Ignore system windows, desktop, and our own app
+    if (strcmp(className, "Shell_TrayWnd") == 0 || 
+        strcmp(className, "Shell_SecondaryTrayWnd") == 0 || 
+        strcmp(className, "TaskbarHiderTrayApp") == 0 ||
+        strcmp(className, "Progman") == 0 || 
+        strcmp(className, "WorkerW") == 0 ||
+        strcmp(className, "Windows.UI.Core.CoreWindow") == 0) {
+        return TRUE;
+    }
+
+    // Check Maximized
+    if (IsZoomed(hwnd)) {
+        data->hasMaxOrFullscreen = true;
+        return FALSE; // Stop enumeration
+    }
+
+    // Check Fullscreen
+    RECT rcWindow;
+    if (GetWindowRect(hwnd, &rcWindow)) {
+        HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi = { sizeof(MONITORINFO) };
+        if (GetMonitorInfo(hMon, &mi)) {
+            if (rcWindow.left <= mi.rcMonitor.left && rcWindow.top <= mi.rcMonitor.top &&
+                rcWindow.right >= mi.rcMonitor.right && rcWindow.bottom >= mi.rcMonitor.bottom) {
+                data->hasMaxOrFullscreen = true;
+                return FALSE; // Stop enumeration
+            }
+        }
+    }
+
+    return TRUE;
 }
 
 void CheckAndToggleTaskbar() {
@@ -115,15 +147,24 @@ void CheckAndToggleTaskbar() {
 
     HWND hwnd = GetForegroundWindow();
 
-    // 1. DESKTOP OVERRIDE CHECK
+    // 1. DESKTOP & CONTEXT MENU OVERRIDE CHECK
     bool isOnDesktop = false;
     if (!hwnd) {
         isOnDesktop = true;
     } else {
         char className[256];
         GetClassName(hwnd, className, sizeof(className));
-        if (strcmp(className, "Progman") == 0 || strcmp(className, "WorkerW") == 0) {
+        if (strcmp(className, "Progman") == 0 || strcmp(className, "WorkerW") == 0 || strcmp(className, "Shell_TrayWnd") == 0) {
             isOnDesktop = true;
+        } else if (strcmp(className, "#32768") == 0) {
+            POINT pt;
+            GetCursorPos(&pt);
+            HWND hwndUnder = WindowFromPoint(pt);
+            char underClass[256];
+            GetClassName(hwndUnder, underClass, sizeof(underClass));
+            if (strcmp(underClass, "Progman") == 0 || strcmp(underClass, "WorkerW") == 0 || strcmp(underClass, "SysListView32") == 0) {
+                isOnDesktop = true;
+            }
         }
     }
 
@@ -133,16 +174,9 @@ void CheckAndToggleTaskbar() {
         return;
     }
 
-    // 2. CHECK MAXIMIZED STATE
-    bool isMaximized = false;
-    if (hwnd) {
-        char className[256];
-        GetClassName(hwnd, className, sizeof(className));
-        isMaximized = (IsWindowVisible(hwnd) && IsZoomed(hwnd) && !IsIconic(hwnd));
-        if (strcmp(className, "Shell_TrayWnd") == 0 || strcmp(className, "Windows.UI.Core.CoreWindow") == 0) {
-            isMaximized = false;
-        }
-    }
+    // 2. CHECK IF ANY OPEN WINDOW IS MAXIMIZED OR FULLSCREEN
+    EnumWindowData winData = {};
+    EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
 
     // 3. POPUP MODES
     if (g_popupSetting == 0) {
@@ -157,13 +191,14 @@ void CheckAndToggleTaskbar() {
     } 
     else if (g_popupSetting == 2) {
         // Mode: AUTO
-        if (isMaximized) {
+        if (winData.hasMaxOrFullscreen) {
+            // Area is occupied by at least one maximized/fullscreen window: Hide taskbar
             ApplyTaskbarState(false, false, 2);
             g_tempShowTicks = 0;
         } else {
-            // Non-Maximized: Show for 3 seconds, then automatically hide
-            ApplyTaskbarState(true, false, 2);
-            g_tempShowTicks = 12; // 12 * 250ms = 3 seconds
+            // Taskbar area is completely unoccupied: Strictly visible
+            ApplyTaskbarState(true, true, 2);
+            g_tempShowTicks = 0;
         }
     }
 }
@@ -193,35 +228,30 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         case WM_TIMER:
             if (wParam == ID_TIMER_CHECK && g_isActive) {
-                // Handle 3-second temporary reveal countdown
-                if (g_tempShowTicks > 0) {
-                    g_tempShowTicks--;
-                    if (g_tempShowTicks == 0) {
-                        ApplyTaskbarState(false, false, g_popupSetting);
-                    }
-                } 
-                // If taskbar is hidden, check hover edge for AUTO mode
-                else if (g_popupSetting == 2 && g_isCurrentlyHidden) {
-                    HWND fgHwnd = GetForegroundWindow();
-                    bool isMaximized = false;
-                    if (fgHwnd) {
-                        char className[256];
-                        GetClassName(fgHwnd, className, sizeof(className));
-                        isMaximized = (IsWindowVisible(fgHwnd) && IsZoomed(fgHwnd) && !IsIconic(fgHwnd));
-                        if (strcmp(className, "Shell_TrayWnd") == 0 || strcmp(className, "Windows.UI.Core.CoreWindow") == 0) {
-                            isMaximized = false;
-                        }
-                    }
+                // In AUTO mode, if taskbar is hidden, check hover edge
+                if (g_popupSetting == 2 && g_isCurrentlyHidden) {
+                    EnumWindowData winData = {};
+                    EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
 
-                    // Only allow hover popups if active window is NOT maximized
-                    if (!isMaximized) {
+                    // Only allow hover popups if NO open window is maximized or fullscreen
+                    if (!winData.hasMaxOrFullscreen) {
                         POINT pt;
                         GetCursorPos(&pt);
                         int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
                         if (pt.y >= screenHeight - 5) {
                             ApplyTaskbarState(true, false, 2);
-                            g_tempShowTicks = 12; // Pop up for 3 seconds, then hide again
+                            g_tempShowTicks = 12; // Pop up for 3 seconds on hover
+                        }
+                    }
+                } else if (g_popupSetting == 2 && g_tempShowTicks > 0) {
+                    // Handle temporary 3-second hover countdown
+                    g_tempShowTicks--;
+                    if (g_tempShowTicks == 0) {
+                        EnumWindowData winData = {};
+                        EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
+                        if (winData.hasMaxOrFullscreen) {
+                            ApplyTaskbarState(false, false, 2);
                         }
                     }
                 }
