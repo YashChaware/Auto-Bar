@@ -1,51 +1,46 @@
 # AutoBar
 
-A lightweight C++ system tray application that automatically controls your Windows taskbar behavior when working with maximized windows, giving you a completely immersive, distraction-free workspace. Includes fine-grained control over popup modes, desktop persistence, and seamless startup configuration.
+A lightweight C++ system tray application that automatically manages your Windows taskbar behavior when working with maximized or fullscreen windows, delivering an immersive, distraction-free workspace. Features fine-grained popup controls, desktop persistence, smart hover reveal, and automated Windows startup configuration.
+
+---
+
+## Key Features
+
+- **Multi-Window & Fullscreen Detection:** Uses global window scanning (`EnumWindows`) and monitor-boundary calculation to auto-hide the taskbar whenever *any* window on your system is maximized or running borderless fullscreen (games, media players, IDEs).
+- **Smart Auto Hover Reveal:** Temporarily reveals the taskbar for 3 seconds upon window focus or when mouse-hovering the bottom screen edge in **Auto** mode.
+- **Desktop Persistence:** Option to permanently pin the taskbar whenever you return to the desktop (`Progman` / `WorkerW`), ignoring auto-hide rules.
+- **Multi-Monitor Support:** Seamlessly handles both primary (`Shell_TrayWnd`) and secondary monitor taskbars (`Shell_SecondaryTrayWnd`).
+- **System Tray Controls:** Easily toggle between **Off**, **On**, and **Auto** modes, configure desktop behavior, or exit via a right-click tray menu.
+- **Automated Windows Startup:** Prompts on first launch to configure run-on-startup via the Windows Registry (`HKCU\...\Run`).
+- **Zero Workspace Distortion:** Uses native shell state flags so Windows never distorts or resizes maximized application layouts.
 
 ---
 
 ## Version History & Changelog
 
-### `v1.6` — Multi-Window Detection & Fullscreen Support (Current)
-* **New Feature:** Replaced single-window tracking with global window enumeration (`EnumWindows`). Auto mode now correctly hides the taskbar if *any* open window on the system is maximized or fullscreen, not just the active foreground window.
-* **New Feature:** Added robust monitor-boundary calculation to properly detect borderless fullscreen applications (e.g., games, media players).
-* **Refinement:** Strict Auto logic updated. When no open windows are maximized or consuming the screen space, the taskbar stays strictly visible, eliminating unnecessary auto-hiding on an empty desktop.
-
-### `v1.5` — Smart Auto Hover & Focus Hierarchy Update (Current)
-* **New Feature:** In **Auto** mode, non-maximized windows reveal the taskbar for 3 seconds upon focus or launch, and then automatically hide. Hovering the bottom screen edge triggers a fresh 3-second reveal.
-* **Optimization:** Streamlined execution flow and event hooks to maintain near-zero CPU and memory usage.
-* **Refinement:** Unified logic hierarchy ensuring **"Keep Taskbar on Desktop"** strictly overrides all popup modes whenever the desktop is active.
-
-### `v1.4` — Startup Integration Update (Current)
-* **New Feature:** Added an automated startup configuration prompt. When launching the application for the first time, it checks the Windows Registry and asks if you would like AutoBar to run automatically on Windows startup.
-* **Refinement:** Added robust registry key management (`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`) for seamless background persistence.
-
-### `v1.3` — Clean Desktop & Persistence Update
-* **New Feature:** Added the **"Keep Taskbar on Desktop"** tray option. When enabled, the taskbar stays permanently visible whenever you are on the desktop, ignoring auto-hide restrictions.
-* **Refinement:** Unified all state checks to prevent taskbar flickering or unwanted pop-ups when switching between tabs.
-* **States Supported:** Fully operational **On**, **Off**, and **Auto** modes.
-
-### `v1.2` — Auto Mode Integration
-* **New Feature:** Introduced **Auto** pop-up mode. 
-* **Behavior:** When a window is maximized, the taskbar is forced completely hidden, blocking accidental mouse-hover triggers from popping the taskbar up while you work.
-
-### `v1.1` — Popup Settings ("On" Mode)
-* **New Feature:** Added custom tray menu controls with a **Popup Settings** submenu (`On` / `Off` / `Auto`).
-* **Behavior:** In **On** mode, the application steps back and lets Windows handle native auto-hide behavior, allowing the taskbar to slide up smoothly when you hover your mouse at the edge of the screen.
-
-### `v1.0` — Initial Release (Plain Taskbar Hide)
-* **Core Logic:** Basic background window event hooks (`EVENT_SYSTEM_FOREGROUND`) to detect when a window is maximized (`IsZoomed`).
-* **Core Action:** Automatically sends shell messages (`ABM_SETSTATE` and `ShowWindow`) to hide the main and secondary taskbars when working in maximized full-screen apps.
+### 🚀 `v1.0.0` — Dawn (First Stable Release)
+- **Production Release:** Official stable release combining global window scanning, smart auto hover reveal, desktop persistence, popup controls, and registry startup integration.
+- **Global Window Scanning:** Upgraded from single-window tracking to global window enumeration (`EnumWindows`), ensuring taskbar state accurately reflects all background or foreground maximized/fullscreen windows.
+- **Smart Focus & Edge Reveal:** Implemented 3-second temporary taskbar reveals upon window focus/launch and bottom edge hover triggers in Auto mode.
+- **Desktop Override:** Integrated **"Keep Taskbar on Desktop"** logic (`g_keepTaskbarOnDesktop`) that forces taskbar visibility whenever shell desktop surfaces (`Progman` / `WorkerW`) are focused.
+- **Startup Integration:** First-launch prompt adding background persistence via `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`.
 
 ---
 
-## Features At-A-Glance
-* **System Tray Integration:** Runs quietly in the system tray with a right-click configuration menu.
-* **Multi-Monitor Support:** Automatically manages both main and secondary taskbars (`Shell_TrayWnd` and `Shell_SecondaryTrayWnd`).
-* **Zero Workspace Shrinking:** Uses proper shell state flags so Windows doesn't incorrectly resize your maximized application windows.
+### 🧪 Pre-Release Development Milestones
+
+- **`v0.5` — Multi-Window & Fullscreen Engine:** Added `EnumWindows` scanning and monitor-boundary calculations for borderless fullscreen apps.
+- **`v0.4` — Smart Auto Hover & Focus:** Added 3-second temporary taskbar reveal on window focus and screen edge hover events.
+- **`v0.3` — Startup Configuration:** Implemented registry key checks and automated first-launch startup prompt.
+- **`v0.2` — Desktop Persistence & Popup Modes:** Introduced **"Keep Taskbar on Desktop"** override along with **On**, **Off**, and **Auto** popup control menu.
+- **`v0.1` — Proof of Concept:** Initial background WinEvent hook engine (`EVENT_SYSTEM_FOREGROUND`) targeting `IsZoomed` window state toggles.
+
+---
 
 ## How to Build
-Compile the source code using any standard C++ compiler (like MinGW or Visual Studio) linked with the Windows API and Shell libraries:
 
+Compile `autobar.cpp` using any standard C++ compiler linked with Windows API libraries (`user32`, `shell32`, `advapi32`):
+
+### Using MinGW (GCC)
 ```bash
-g++ autobar.cpp -o AutoBar.exe -lshell32 -luser32
+g++ autobar.cpp -o AutoBar.exe -mwindows -lshell32 -luser32 -ladvapi32
