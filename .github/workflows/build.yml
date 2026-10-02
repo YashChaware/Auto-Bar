@@ -20,27 +20,34 @@ jobs:
       - name: Set up MSVC Compiler
         uses: ilammy/msvc-dev-cmd@v1
 
+      # Explicitly linked dwmapi.lib for DWM cloaked window detection
       - name: Compile AutoBar.exe & Generate Log
         shell: cmd
         run: |
-          cl /O2 /W4 /EHsc autobar.cpp /link user32.lib shell32.lib advapi32.lib /SUBSYSTEM:WINDOWS /OUT:AutoBar.exe > build.log 2>&1
+          cl /O2 /W4 /EHsc autobar.cpp /link user32.lib shell32.lib advapi32.lib dwmapi.lib /SUBSYSTEM:WINDOWS /OUT:AutoBar.exe > build.log 2>&1
           type build.log
 
       - name: Save build.log as Downloadable Artifact
         uses: actions/upload-artifact@v4
-        if: always()  # Saves the log file even if compilation fails!
+        if: always()  # Saves log file even if compilation fails
         with:
           name: msvc-build-log-${{ github.sha }}
           path: build.log
           retention-days: 14
 
+      # Native PowerShell check prevents crashes if compilation fails
       - name: Generate Build Summary in GitHub UI
-        shell: bash
+        shell: pwsh
         run: |
-          echo "### 📊 Build Diagnostics & Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Timestamp:** $(date -u)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit SHA:** \`${GITHUB_SHA:0:7}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Binary Size:** $(wc -c < AutoBar.exe) bytes" >> $GITHUB_STEP_SUMMARY
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 Build Diagnostics & Summary"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Timestamp:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Commit SHA:** \`${env:GITHUB_SHA.Substring(0, 7)}\`"
+          if (Test-Path "AutoBar.exe") {
+              $size = (Get-Item "AutoBar.exe").Length
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Binary Size:** $size bytes"
+          } else {
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Binary Size:** Build Failed (No Output Binary)"
+          }
 
       - name: Commit and Push Updated Executable
         uses: stefanzweifel/git-auto-commit-action@v5
