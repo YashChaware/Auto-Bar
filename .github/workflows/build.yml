@@ -41,7 +41,7 @@ jobs:
         run: |
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 Build Diagnostics & Summary"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Timestamp:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Commit SHA:** \`${env:GITHUB_SHA.Substring(0, 7)}\`"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Commit SHA:** ``$($env:GITHUB_SHA.Substring(0, 7))``"
           if (Test-Path "AutoBar.exe") {
               $size = (Get-Item "AutoBar.exe").Length
               Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Binary Size:** $size bytes"
