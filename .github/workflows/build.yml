@@ -24,7 +24,7 @@ jobs:
       - name: Compile AutoBar.exe & Generate Log
         shell: cmd
         run: |
-          cl /O2 /W4 /EHsc Autobar.cpp /link user32.lib shell32.lib advapi32.lib dwmapi.lib /SUBSYSTEM:WINDOWS /OUT:AutoBar.exe > build.log 2>&1
+          cl /O2 /W4 /EHsc Autobar.cpp /link user32.lib shell32.lib advapi32.lib dwmapi.lib gdi32.lib /SUBSYSTEM:WINDOWS /OUT:AutoBar.exe > build.log 2>&1
           type build.log
 
       - name: Save build.log as Downloadable Artifact
