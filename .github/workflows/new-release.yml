@@ -41,13 +41,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up MSVC Compiler
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Compile AutoBar.exe
-        run: |
-          cl /O2 /W4 /EHsc AutoBar.cpp /link user32.lib shell32.lib advapi32.lib dwmapi.lib /SUBSYSTEM:WINDOWS /OUT:AutoBar.exe
-
       - name: Update README.md with New Release Notes
         shell: pwsh
         env:
