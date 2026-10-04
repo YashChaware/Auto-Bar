@@ -48,20 +48,35 @@ jobs:
           RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
           $readmePath = "README.md"
-          if (Test-Path $readmePath) {$content = Get-Content $readmePath -Raw$marker = "## Version History & Changelog"
-              
-              $title =$env:RELEASE_TITLE
-              $notes = $env:RELEASE_NOTES$newEntry = "`n### 🚀 $title`n$notes`n"
-              
+          $marker = "## Version History & Changelog"
+
+          if (Test-Path $readmePath) {
+              $content = Get-Content $readmePath -Raw
+
+              $title = $env:RELEASE_TITLE
+              $notes = $env:RELEASE_NOTES
+
+              $newEntry = "`n### 🚀 $title`n$notes`n"
+
               if ($content.Contains($marker)) {
-                  $updatedContent = $content.Replace($marker, "$marker`n$newEntry")
-                  [System.IO.File]::WriteAllText((Get-Item $readmePath).FullName, $updatedContent)
+                  $updatedContent = $content.Replace(
+                      $marker,
+                      "$marker`n$newEntry"
+                  )
+
+                  [System.IO.File]::WriteAllText(
+                      (Get-Item $readmePath).FullName,
+                      $updatedContent
+                  )
+
                   Write-Host "[SUCCESS] README.md successfully updated with new release notes."
-              } else {
+              }
+              else {
                   Write-Error "[ERROR] Marker '$marker' not found in README.md!"
                   exit 1
               }
-          } else {
+          }
+          else {
               Write-Error "[ERROR] README.md file not found!"
               exit 1
           }
