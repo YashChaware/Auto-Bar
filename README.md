@@ -18,6 +18,10 @@ A lightweight C++ system tray application that automatically manages your Window
 
 ## Version History & Changelog
 
+### 🚀 v1.0.1 — Dawn patch01
+-  **Fix:** Fixed taskbar behaver on non maximized window.
+
+
 ### 🚀 `v1.0.0` — Dawn (First Stable Release)
 - **Production Release:** Official stable release combining global window scanning, smart auto hover reveal, desktop persistence, popup controls, and registry startup integration.
 - **Global Window Scanning:** Upgraded from single-window tracking to global window enumeration (`EnumWindows`), ensuring taskbar state accurately reflects all background or foreground maximized/fullscreen windows.
