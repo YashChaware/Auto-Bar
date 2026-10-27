@@ -184,28 +184,37 @@ void CheckAndToggleTaskbar() {
 
     HWND hwnd = GetForegroundWindow();
 
-    // 1. DESKTOP & CONTEXT MENU OVERRIDE CHECK
-    bool isOnDesktop = false;
+    // 1. DESKTOP, START MENU, & CONTEXT MENU OVERRIDE CHECK
+    bool keepVisibleOverride = false;
     if (!hwnd) {
-        isOnDesktop = true;
+        keepVisibleOverride = true;
     } else {
         char className[256];
         GetClassName(hwnd, className, sizeof(className));
-        if (strcmp(className, "Progman") == 0 || strcmp(className, "WorkerW") == 0 || strcmp(className, "Shell_TrayWnd") == 0) {
-            isOnDesktop = true;
-        } else if (strcmp(className, "#32768") == 0) {
+        
+        // If user is on Desktop, clicking Taskbar, Start Menu, or a Context Menu (#32768)
+        if (strcmp(className, "Progman") == 0 || 
+            strcmp(className, "WorkerW") == 0 || 
+            strcmp(className, "Shell_TrayWnd") == 0 ||
+            strcmp(className, "Shell_SecondaryTrayWnd") == 0 ||
+            strcmp(className, "Windows.UI.Core.CoreWindow") == 0 || // Often Start Menu / Win11 Shell UI
+            strcmp(className, "Xaml_WindowedPopupClass") == 0) {     // Start menu popups
+            keepVisibleOverride = true;
+        } 
+        else if (strcmp(className, "#32768") == 0) { // Context menu class
             POINT pt;
             GetCursorPos(&pt);
             HWND hwndUnder = WindowFromPoint(pt);
             char underClass[256];
             GetClassName(hwndUnder, underClass, sizeof(underClass));
-            if (strcmp(underClass, "Progman") == 0 || strcmp(underClass, "WorkerW") == 0 || strcmp(underClass, "SysListView32") == 0) {
-                isOnDesktop = true;
+            if (strcmp(underClass, "Progman") == 0 || strcmp(underClass, "WorkerW") == 0 || 
+                strcmp(underClass, "SysListView32") == 0 || strcmp(underClass, "Shell_TrayWnd") == 0) {
+                keepVisibleOverride = true;
             }
         }
     }
 
-    if (isOnDesktop && g_keepTaskbarOnDesktop) {
+    if (keepVisibleOverride && g_keepTaskbarOnDesktop) {
         ApplyTaskbarState(true, true, g_popupSetting);
         g_tempShowTicks = 0;
         return;
@@ -217,23 +226,19 @@ void CheckAndToggleTaskbar() {
 
     // 3. POPUP MODES
     if (g_popupSetting == 0) {
-        // Mode: OFF (Strictly force-hidden)
         ApplyTaskbarState(false, false, 0);
         g_tempShowTicks = 0;
     } 
     else if (g_popupSetting == 1) {
-        // Mode: ON (Native auto-hide, hover always enabled)
         ApplyTaskbarState(true, false, 1);
         g_tempShowTicks = 0;
     } 
     else if (g_popupSetting == 2) {
         // Mode: AUTO
         if (winData.hasMaxOrFullscreen) {
-            // Area is occupied by at least one maximized/fullscreen window: Hide taskbar
             ApplyTaskbarState(false, false, 2);
             g_tempShowTicks = 0;
         } else {
-            // Taskbar area is completely unoccupied: Strictly visible
             ApplyTaskbarState(true, true, 2);
             g_tempShowTicks = 0;
         }
