@@ -18,6 +18,10 @@ A lightweight C++ system tray application that automatically manages your Window
 
 ## Version History & Changelog
 
+### 🚀 v1.0.3 — compilation path for dawn
+- **Feature:** replaced compiler to MinGW.
+
+
 ### 🚀 v1.0.2 — patch for dawn
 - **Feature:** fixed auto hide toggle bug.
 
