@@ -17,29 +17,32 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up MSVC Compiler
-        uses: ilammy/msvc-dev-cmd@v1
+      - name: Set up MSYS2 & MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msys2-update: true
+          path-type: inherit
+          install: >-
+            mingw-w64-ucrt-x86_64-toolchain
 
-      # Explicitly linked dwmapi.lib for DWM cloaked window detection
-      - name: Compile AutoBar.exe & Generate Log
-        shell: cmd
+      - name: Compile AutoBar.exe with MinGW & Generate Log
+        shell: msys2 {0}
         run: |
-          cl /O2 /W4 /EHsc Autobar.cpp /link user32.lib shell32.lib advapi32.lib dwmapi.lib gdi32.lib /SUBSYSTEM:WINDOWS /OUT:AutoBar.exe > build.log 2>&1
-          type build.log
+          g++ -O2 Autobar.cpp -o AutoBar.exe -luser32 -lshell32 -ladvapi32 -ldwmapi -lgdi32 -mwindows > build.log 2>&1
+          cat build.log
 
       - name: Save build.log as Downloadable Artifact
         uses: actions/upload-artifact@v4
         if: always()  # Saves log file even if compilation fails
         with:
-          name: msvc-build-log-${{ github.sha }}
+          name: mingw-build-log-${{ github.sha }}
           path: build.log
           retention-days: 14
 
-      # Native PowerShell check prevents crashes if compilation fails
       - name: Generate Build Summary in GitHub UI
         shell: pwsh
         run: |
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 Build Diagnostics & Summary"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 Build Diagnostics & Summary (MinGW GCC)"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Timestamp:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Commit SHA:** ``$($env:GITHUB_SHA.Substring(0, 7))``"
           if (Test-Path "AutoBar.exe") {
@@ -52,5 +55,5 @@ jobs:
       - name: Commit and Push Updated Executable
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "build: auto-update AutoBar.exe"
+          commit_message: "build: auto-update AutoBar.exe using MinGW"
           file_pattern: "AutoBar.exe"
