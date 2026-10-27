@@ -18,6 +18,10 @@ A lightweight C++ system tray application that automatically manages your Window
 
 ## Version History & Changelog
 
+### 🚀 v1.0.2 — patch for dawn
+- **Feature:** fixed auto hide toggle bug.
+
+
 ### 🚀 v1.0.1 — Dawn patch01
 -  **Fix:** Fixed taskbar behaver on non maximized window.
 
