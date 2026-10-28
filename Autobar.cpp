@@ -19,7 +19,8 @@ bool g_isStateInitialized = false;
 int g_tempShowTicks = 0; // Countdown timer for temporary reveals
 
 HWINEVENTHOOK g_hHookForeground = NULL;
-HWINEVENTHOOK g_hHookLocation = NULL;
+HWINEVENTHOOK g_hHookMinimize = NULL;
+HWINEVENTHOOK g_hHookDestroy = NULL;
 NOTIFYICONDATA nid = {};
 HWND g_hwndApp = NULL;
 
@@ -192,13 +193,12 @@ void CheckAndToggleTaskbar() {
         char className[256];
         GetClassName(hwnd, className, sizeof(className));
         
-        // If user is on Desktop, clicking Taskbar, Start Menu, or a Context Menu (#32768)
         if (strcmp(className, "Progman") == 0 || 
             strcmp(className, "WorkerW") == 0 || 
             strcmp(className, "Shell_TrayWnd") == 0 ||
             strcmp(className, "Shell_SecondaryTrayWnd") == 0 ||
-            strcmp(className, "Windows.UI.Core.CoreWindow") == 0 || // Often Start Menu / Win11 Shell UI
-            strcmp(className, "Xaml_WindowedPopupClass") == 0) {     // Start menu popups
+            strcmp(className, "Windows.UI.Core.CoreWindow") == 0 || 
+            strcmp(className, "Xaml_WindowedPopupClass") == 0) {
             keepVisibleOverride = true;
         } 
         else if (strcmp(className, "#32768") == 0) { // Context menu class
@@ -254,12 +254,15 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd,
 
 void HookEvents() {
     if (!g_hHookForeground) g_hHookForeground = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    if (!g_hHookLocation) g_hHookLocation = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!g_hHookMinimize)  g_hHookMinimize  = SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!g_hHookDestroy)   g_hHookDestroy   = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    // EVENT_OBJECT_LOCATIONCHANGE removed here!
 }
 
 void UnhookEvents() {
     if (g_hHookForeground) { UnhookWinEvent(g_hHookForeground); g_hHookForeground = NULL; }
-    if (g_hHookLocation) { UnhookWinEvent(g_hHookLocation); g_hHookLocation = NULL; }
+    if (g_hHookMinimize)  { UnhookWinEvent(g_hHookMinimize);  g_hHookMinimize = NULL; }
+    if (g_hHookDestroy)   { UnhookWinEvent(g_hHookDestroy);   g_hHookDestroy = NULL; }
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -275,7 +278,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     EnumWindowData winData = {};
                     EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
 
-                    // Only allow hover popups if NO open window is maximized or fullscreen
                     if (!winData.hasMaxOrFullscreen) {
                         POINT pt;
                         GetCursorPos(&pt);
@@ -287,7 +289,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         }
                     }
                 } else if (g_popupSetting == 2 && g_tempShowTicks > 0) {
-                    // Handle temporary 3-second hover countdown
                     g_tempShowTicks--;
                     if (g_tempShowTicks == 0) {
                         EnumWindowData winData = {};
@@ -372,7 +373,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     nid.uID = 1;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
-    nid.hIcon = CreateEmbeddedIcon(); // Uses your programmatic GDI icon generator
+    nid.hIcon = CreateEmbeddedIcon();
     strcpy(nid.szTip, "AutoBar - Taskbar Hider");
     Shell_NotifyIcon(NIM_ADD, &nid);
 
