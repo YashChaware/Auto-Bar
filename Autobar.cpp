@@ -8,7 +8,8 @@
 #define ID_POPUP_OFF 1003
 #define ID_POPUP_AUTO 1004
 #define ID_DESKTOP_KEEP_UP 1005
-#define ID_QUIT 1006
+#define ID_RUN_AT_STARTUP 1006
+#define ID_QUIT 1007
 #define ID_TIMER_CHECK 9001
 
 // Global Settings
@@ -25,40 +26,62 @@ HWINEVENTHOOK g_hHookDestroy = NULL;
 NOTIFYICONDATA nid = {};
 HWND g_hwndApp = NULL;
 
-// Programmatically create an embedded system tray icon (GDI-based, no external .ico needed)
-HICON CreateEmbeddedIcon() {
-    int cx = GetSystemMetrics(SM_CXSMICON);
-    int cy = GetSystemMetrics(SM_CYSMICON);
+// --- REGISTRY SETTINGS & STARTUP MANAGEMENT ---
 
-    HDC hdcScreen = GetDC(NULL);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    HBITMAP hBmp = CreateCompatibleBitmap(hdcScreen, cx, cy);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBmp);
+void LoadSettings() {
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\AutoBar", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD val = 0, size = sizeof(DWORD);
+        if (RegQueryValueEx(hKey, "IsActive", NULL, NULL, (LPBYTE)&val, &size) == ERROR_SUCCESS) g_isActive = (val != 0);
+        if (RegQueryValueEx(hKey, "PopupSetting", NULL, NULL, (LPBYTE)&val, &size) == ERROR_SUCCESS) g_popupSetting = (int)val;
+        if (RegQueryValueEx(hKey, "KeepTaskbarOnDesktop", NULL, NULL, (LPBYTE)&val, &size) == ERROR_SUCCESS) g_keepTaskbarOnDesktop = (val != 0);
+        RegCloseKey(hKey);
+    }
+}
 
-    // Draw background/icon design
-    HBRUSH hBrush = CreateSolidBrush(RGB(30, 144, 255)); // Dodger Blue
-    RECT rc = { 0, 0, cx, cy };
-    FillRect(hdcMem, &rc, hBrush);
-    DeleteObject(hBrush);
+void SaveSettings() {
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\AutoBar", 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+        DWORD val;
+        val = g_isActive ? 1 : 0;
+        RegSetValueEx(hKey, "IsActive", 0, REG_DWORD, (LPBYTE)&val, sizeof(DWORD));
+        val = (DWORD)g_popupSetting;
+        RegSetValueEx(hKey, "PopupSetting", 0, REG_DWORD, (LPBYTE)&val, sizeof(DWORD));
+        val = g_keepTaskbarOnDesktop ? 1 : 0;
+        RegSetValueEx(hKey, "KeepTaskbarOnDesktop", 0, REG_DWORD, (LPBYTE)&val, sizeof(DWORD));
+        RegCloseKey(hKey);
+    }
+}
 
-    // Draw a simple white bar graphic inside
-    HBRUSH hBarBrush = CreateSolidBrush(RGB(255, 255, 255));
-    RECT rcBar = { 2, cy - 6, cx - 2, cy - 2 };
-    FillRect(hdcMem, &rcBar, hBarBrush);
-    DeleteObject(hBarBrush);
+bool IsStartupEnabled() {
+    HKEY hKey;
+    bool enabled = false;
+    const char* subKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, subKey, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        char path[MAX_PATH];
+        DWORD pathLen = sizeof(path);
+        if (RegQueryValueEx(hKey, "AutoBar", NULL, NULL, (LPBYTE)&path, &pathLen) == ERROR_SUCCESS) {
+            enabled = true;
+        }
+        RegCloseKey(hKey);
+    }
+    return enabled;
+}
 
-    SelectObject(hdcMem, hOldBmp);
-    DeleteDC(hdcMem);
-    ReleaseDC(NULL, hdcScreen);
-
-    ICONINFO ii = {};
-    ii.fIcon = TRUE;
-    ii.hbmColor = hBmp;
-    ii.hbmMask = hBmp;
-    HICON hIcon = CreateIconIndirect(&ii);
-
-    DeleteObject(hBmp);
-    return hIcon;
+void SetStartupEnabled(bool enable) {
+    HKEY hKey;
+    const char* subKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    // Fixed: 5 parameters only (removed the extra NULL)
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, subKey, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
+        if (enable) {
+            char exePath[MAX_PATH];
+            GetModuleFileName(NULL, exePath, MAX_PATH);
+            RegSetValueEx(hKey, "AutoBar", 0, REG_SZ, (LPBYTE)exePath, (DWORD)(strlen(exePath) + 1));
+        } else {
+            RegDeleteValue(hKey, "AutoBar");
+        }
+        RegCloseKey(hKey);
+    }
 }
 
 void CheckAndPromptStartup() {
@@ -80,14 +103,42 @@ void CheckAndPromptStartup() {
         MB_ICONQUESTION | MB_YESNO);
 
     if (msgBoxID == IDYES) {
-        char exePath[MAX_PATH];
-        GetModuleFileName(NULL, exePath, MAX_PATH);
-
-        if (RegCreateKeyEx(HKEY_CURRENT_USER, subKey, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-            RegSetValueEx(hKey, valueName, 0, REG_SZ, (LPBYTE)exePath, (DWORD)(strlen(exePath) + 1));
-            RegCloseKey(hKey);
-        }
+        SetStartupEnabled(true);
     }
+}
+
+// Programmatically create an embedded system tray icon (GDI-based)
+HICON CreateEmbeddedIcon() {
+    int cx = GetSystemMetrics(SM_CXSMICON);
+    int cy = GetSystemMetrics(SM_CYSMICON);
+
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBmp = CreateCompatibleBitmap(hdcScreen, cx, cy);
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBmp);
+
+    HBRUSH hBrush = CreateSolidBrush(RGB(30, 144, 255)); // Dodger Blue
+    RECT rc = { 0, 0, cx, cy };
+    FillRect(hdcMem, &rc, hBrush);
+    DeleteObject(hBrush);
+
+    HBRUSH hBarBrush = CreateSolidBrush(RGB(255, 255, 255));
+    RECT rcBar = { 2, cy - 6, cx - 2, cy - 2 };
+    FillRect(hdcMem, &rcBar, hBarBrush);
+    DeleteObject(hBarBrush);
+
+    SelectObject(hdcMem, hOldBmp);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+
+    ICONINFO ii = {};
+    ii.fIcon = TRUE;
+    ii.hbmColor = hBmp;
+    ii.hbmMask = hBmp;
+    HICON hIcon = CreateIconIndirect(&ii);
+
+    DeleteObject(hBmp);
+    return hIcon;
 }
 
 void ApplyTaskbarState(bool showOverlay, bool stayVisible = false, int popupSetting = 2) {
@@ -136,13 +187,11 @@ struct EnumWindowData {
     bool hasMaxOrFullscreen = false;
 };
 
-// Callback to check if ANY open window is maximized or in fullscreen (with DWM Cloaked filtering)
 BOOL CALLBACK CheckOpenWindowsProc(HWND hwnd, LPARAM lParam) {
     EnumWindowData* data = (EnumWindowData*)lParam;
 
     if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
 
-    // Filter out background/cloaked modern UWP windows and invisible helper processes
     BOOL isCloaked = FALSE;
     if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &isCloaked, sizeof(isCloaked))) && isCloaked) {
         return TRUE;
@@ -151,7 +200,6 @@ BOOL CALLBACK CheckOpenWindowsProc(HWND hwnd, LPARAM lParam) {
     char className[256];
     GetClassName(hwnd, className, sizeof(className));
 
-    // Ignore system windows, desktop, and our own app
     if (strcmp(className, "Shell_TrayWnd") == 0 || 
         strcmp(className, "Shell_SecondaryTrayWnd") == 0 || 
         strcmp(className, "TaskbarHiderTrayApp") == 0 ||
@@ -161,13 +209,11 @@ BOOL CALLBACK CheckOpenWindowsProc(HWND hwnd, LPARAM lParam) {
         return TRUE;
     }
 
-    // Check Maximized
     if (IsZoomed(hwnd)) {
         data->hasMaxOrFullscreen = true;
-        return FALSE; // Stop enumeration
+        return FALSE;
     }
 
-    // Check Fullscreen
     RECT rcWindow;
     if (GetWindowRect(hwnd, &rcWindow)) {
         HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
@@ -176,7 +222,7 @@ BOOL CALLBACK CheckOpenWindowsProc(HWND hwnd, LPARAM lParam) {
             if (rcWindow.left <= mi.rcMonitor.left && rcWindow.top <= mi.rcMonitor.top &&
                 rcWindow.right >= mi.rcMonitor.right && rcWindow.bottom >= mi.rcMonitor.bottom) {
                 data->hasMaxOrFullscreen = true;
-                return FALSE; // Stop enumeration
+                return FALSE;
             }
         }
     }
@@ -191,8 +237,6 @@ void CheckAndToggleTaskbar() {
     }
 
     HWND hwnd = GetForegroundWindow();
-
-    // 1. DESKTOP, START MENU, & CONTEXT MENU OVERRIDE CHECK
     bool keepVisibleOverride = false;
     if (!hwnd) {
         keepVisibleOverride = true;
@@ -208,7 +252,7 @@ void CheckAndToggleTaskbar() {
             strcmp(className, "Xaml_WindowedPopupClass") == 0) {
             keepVisibleOverride = true;
         } 
-        else if (strcmp(className, "#32768") == 0) { // Context menu class
+        else if (strcmp(className, "#32768") == 0) {
             POINT pt;
             GetCursorPos(&pt);
             HWND hwndUnder = WindowFromPoint(pt);
@@ -227,11 +271,9 @@ void CheckAndToggleTaskbar() {
         return;
     }
 
-    // 2. CHECK IF ANY OPEN WINDOW IS MAXIMIZED OR FULLSCREEN
     EnumWindowData winData = {};
     EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
 
-    // 3. POPUP MODES
     if (g_popupSetting == 0) {
         ApplyTaskbarState(false, false, 0);
         g_tempShowTicks = 0;
@@ -241,7 +283,6 @@ void CheckAndToggleTaskbar() {
         g_tempShowTicks = 0;
     } 
     else if (g_popupSetting == 2) {
-        // Mode: AUTO
         if (winData.hasMaxOrFullscreen) {
             ApplyTaskbarState(false, false, 2);
             g_tempShowTicks = 0;
@@ -279,7 +320,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         case WM_TIMER:
             if (wParam == ID_TIMER_CHECK && g_isActive) {
-                // In AUTO mode, if taskbar is hidden, check hover edge
                 if (g_popupSetting == 2 && g_isCurrentlyHidden) {
                     EnumWindowData winData = {};
                     EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
@@ -291,7 +331,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
                         if (pt.y >= screenHeight - 5) {
                             ApplyTaskbarState(true, false, 2);
-                            g_tempShowTicks = 12; // Pop up for 3 seconds on hover
+                            g_tempShowTicks = 12;
                         }
                     }
                 } else if (g_popupSetting == 2 && g_tempShowTicks > 0) {
@@ -315,6 +355,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 
                 AppendMenu(hMenu, MF_STRING | (g_isActive ? MF_CHECKED : 0), ID_TOGGLE_ACTIVE, "Auto-Hide on Maximize");
                 AppendMenu(hMenu, MF_STRING | (g_keepTaskbarOnDesktop ? MF_CHECKED : 0), ID_DESKTOP_KEEP_UP, "Keep Taskbar on Desktop");
+                AppendMenu(hMenu, MF_STRING | (IsStartupEnabled() ? MF_CHECKED : 0), ID_RUN_AT_STARTUP, "Run at Startup");
 
                 HMENU hSubMenu = CreatePopupMenu();
                 AppendMenu(hSubMenu, MF_STRING | (g_popupSetting == 1 ? MF_CHECKED : 0), ID_POPUP_ON, "On");
@@ -332,18 +373,26 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
                 if (cmd == ID_TOGGLE_ACTIVE) {
                     g_isActive = !g_isActive;
+                    SaveSettings();
                     CheckAndToggleTaskbar();
                 } else if (cmd == ID_DESKTOP_KEEP_UP) {
                     g_keepTaskbarOnDesktop = !g_keepTaskbarOnDesktop;
+                    SaveSettings();
                     CheckAndToggleTaskbar();
+                } else if (cmd == ID_RUN_AT_STARTUP) {
+                    bool currentStartup = IsStartupEnabled();
+                    SetStartupEnabled(!currentStartup);
                 } else if (cmd == ID_POPUP_ON) {
                     g_popupSetting = 1;
+                    SaveSettings();
                     CheckAndToggleTaskbar();
                 } else if (cmd == ID_POPUP_OFF) {
                     g_popupSetting = 0;
+                    SaveSettings();
                     CheckAndToggleTaskbar();
                 } else if (cmd == ID_POPUP_AUTO) {
                     g_popupSetting = 2;
+                    SaveSettings();
                     CheckAndToggleTaskbar();
                 } else if (cmd == ID_QUIT) {
                     DestroyWindow(hwnd);
@@ -363,6 +412,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    LoadSettings(); // Load saved preferences from registry on startup
     CheckAndPromptStartup();
 
     const char CLASS_NAME[] = "TaskbarHiderTrayApp";
