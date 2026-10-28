@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <shellapi.h>
+#include <dwmapi.h>
 
 #define WM_TRAYICON (WM_APP + 1)
 #define ID_TOGGLE_ACTIVE 1001
@@ -135,11 +136,17 @@ struct EnumWindowData {
     bool hasMaxOrFullscreen = false;
 };
 
-// Callback to check if ANY open window is maximized or in fullscreen
+// Callback to check if ANY open window is maximized or in fullscreen (with DWM Cloaked filtering)
 BOOL CALLBACK CheckOpenWindowsProc(HWND hwnd, LPARAM lParam) {
     EnumWindowData* data = (EnumWindowData*)lParam;
 
     if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
+
+    // Filter out background/cloaked modern UWP windows and invisible helper processes
+    BOOL isCloaked = FALSE;
+    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &isCloaked, sizeof(isCloaked))) && isCloaked) {
+        return TRUE;
+    }
 
     char className[256];
     GetClassName(hwnd, className, sizeof(className));
@@ -256,7 +263,6 @@ void HookEvents() {
     if (!g_hHookForeground) g_hHookForeground = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (!g_hHookMinimize)  g_hHookMinimize  = SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (!g_hHookDestroy)   g_hHookDestroy   = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    // EVENT_OBJECT_LOCATIONCHANGE removed here!
 }
 
 void UnhookEvents() {
