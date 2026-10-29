@@ -18,6 +18,10 @@ A lightweight C++ system tray application that automatically manages your Window
 
 ## Version History & Changelog
 
+### 🚀 v1.1.o —Velocity
+#### ✨ What's New & Improved * **Settings Persistence:** User preferences (activation status, popup modes, and desktop behavior) now automatically save to the Windows Registry (`HKEY_CURRENT_USER\Software\AutoBar`) and persist across system reboots. * **Tray Menu Startup Toggle:** Added a direct "Run at Startup" checkbox right inside the right-click system tray menu for effortless startup management. * **Smart DWM Window Filtering:** Integrated the Desktop Window Manager (`DWMWA_CLOAKED`) check to ensure background UWP apps, suspended store tasks, and hidden helper windows never falsely trigger full-screen mode. * **Butter-Smooth Performance:** Completely eliminated CPU spikes and micro-stutters during window dragging by removing heavy location-change hooks. * **Refined Edge Hover Timer:** Fixed and fine-tuned edge hover detection and timer logic to ensure smooth, responsive taskbar popups when approaching the bottom screen edge in Auto mode. * **Automated Sync & CI/CD Pipeline:** Fully validated MinGW compilation pipeline with robust library linking (`-ldwmapi`) and streamlined automation for seamless updates.
+
+
 ### 🚀 v1.0.3 — compilation path for dawn
 - **Feature:** replaced compiler to MinGW.
 
