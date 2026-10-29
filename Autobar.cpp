@@ -319,33 +319,38 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             return 0;
 
         case WM_TIMER:
-            if (wParam == ID_TIMER_CHECK && g_isActive) {
-                if (g_popupSetting == 2 && g_isCurrentlyHidden) {
-                    EnumWindowData winData = {};
-                    EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
+         if (wParam == ID_TIMER_CHECK && g_isActive) {
+             // Always check current window state in Auto mode
+             if (g_popupSetting == 2) {
+                 EnumWindowData winData = {};
+                 EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
 
-                    if (!winData.hasMaxOrFullscreen) {
-                        POINT pt;
-                        GetCursorPos(&pt);
-                        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+                 if (!winData.hasMaxOrFullscreen) {
+                     // No max/fullscreen window open -> force taskbar visible!
+                     if (g_isCurrentlyHidden && g_tempShowTicks == 0) {
+                         ApplyTaskbarState(true, true, 2);
+                     }
+                 } else {
+                     // Max/fullscreen window active -> hide if currently not hidden
+                     if (!g_isCurrentlyHidden) {
+                         ApplyTaskbarState(false, false, 2);
+                     }
+                 }
+             }
 
-                        if (pt.y >= screenHeight - 5) {
-                            ApplyTaskbarState(true, false, 2);
-                            g_tempShowTicks = 12;
-                        }
-                    }
-                } else if (g_popupSetting == 2 && g_tempShowTicks > 0) {
-                    g_tempShowTicks--;
-                    if (g_tempShowTicks == 0) {
-                        EnumWindowData winData = {};
-                        EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
-                        if (winData.hasMaxOrFullscreen) {
-                            ApplyTaskbarState(false, false, 2);
-                        }
-                    }
-                }
-            }
-            return 0;
+             // Handle temporary hover reveal countdown
+             if (g_popupSetting == 2 && g_tempShowTicks > 0) {
+                 g_tempShowTicks--;
+                 if (g_tempShowTicks == 0) {
+                     EnumWindowData winData = {};
+                     EnumWindows(CheckOpenWindowsProc, (LPARAM)&winData);
+                     if (winData.hasMaxOrFullscreen) {
+                         ApplyTaskbarState(false, false, 2);
+                     }
+                 }
+             }
+         }
+         return 0;
 
         case WM_TRAYICON:
             if (lParam == WM_RBUTTONUP || lParam == WM_LBUTTONUP) {
