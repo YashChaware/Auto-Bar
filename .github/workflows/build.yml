@@ -2,12 +2,9 @@ name: Build AutoBar Executable
 
 on:
   push:
-    branches: [ dev, main ]
+    branches: [ main ]
     paths:
       - 'Autobar.cpp'
-      - '.github/workflows/build.yml'
-  pull_request:
-    branches: [ uat, main ]
   workflow_dispatch:
 
 jobs:
@@ -36,7 +33,7 @@ jobs:
 
       - name: Save build.log as Downloadable Artifact
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always()  # Saves log file even if compilation fails
         with:
           name: mingw-build-log-${{ github.sha }}
           path: build.log
@@ -46,7 +43,6 @@ jobs:
         shell: pwsh
         run: |
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 📊 Build Diagnostics & Summary (MinGW GCC)"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Branch:** ``$($env:GITHUB_REF_NAME)``"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Timestamp:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Commit SHA:** ``$($env:GITHUB_SHA.Substring(0, 7))``"
           if (Test-Path "AutoBar.exe") {
@@ -56,9 +52,8 @@ jobs:
               Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Binary Size:** Build Failed (No Output Binary)"
           }
 
-      - name: Commit and Push Updated Executable (Push events only)
-        if: github.event_name == 'push'
+      - name: Commit and Push Updated Executable
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "build: auto-update AutoBar.exe using MinGW [skip ci]"
+          commit_message: "build: auto-update AutoBar.exe using MinGW"
           file_pattern: "AutoBar.exe"

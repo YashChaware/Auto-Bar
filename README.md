@@ -18,32 +18,29 @@ A lightweight C++ system tray application that automatically manages your Window
 
 ## Version History & Changelog
 
-### 🚀 v1.1.0 — Velocity
-#### ✨ What's New & Improved
-- **Settings Persistence:** User preferences (activation status, popup modes, and desktop behavior) now automatically save to the Windows Registry (`HKEY_CURRENT_USER\Software\AutoBar`) and persist across system reboots.
-- **Tray Menu Startup Toggle:** Added a direct "Run at Startup" checkbox right inside the right-click system tray menu for effortless startup management.
-- **Smart DWM Window Filtering:** Integrated the Desktop Window Manager (`DWMWA_CLOAKED`) check to ensure background UWP apps, suspended store tasks, and hidden helper windows never falsely trigger full-screen mode.
-- **Butter-Smooth Performance:** Completely eliminated CPU spikes and micro-stutters during window dragging by removing heavy location-change hooks.
-- **Refined Edge Hover Timer:** Fixed and fine-tuned edge hover detection and timer logic to ensure smooth, responsive taskbar popups when approaching the bottom screen edge in Auto mode.
-- **Automated Sync & CI/CD Pipeline:** Fully validated MinGW compilation pipeline with robust library linking (`-ldwmapi`) and streamlined automation for seamless updates.
 
----
+### 🚀 v1.1.0 —Velocity
+#### ✨ What's New & Improved * **Settings Persistence:** User preferences (activation status, popup modes, and desktop behavior) now automatically save to the Windows Registry (`HKEY_CURRENT_USER\Software\AutoBar`) and persist across system reboots. * **Tray Menu Startup Toggle:** Added a direct "Run at Startup" checkbox right inside the right-click system tray menu for effortless startup management. * **Smart DWM Window Filtering:** Integrated the Desktop Window Manager (`DWMWA_CLOAKED`) check to ensure background UWP apps, suspended store tasks, and hidden helper windows never falsely trigger full-screen mode. * **Butter-Smooth Performance:** Completely eliminated CPU spikes and micro-stutters during window dragging by removing heavy location-change hooks. * **Refined Edge Hover Timer:** Fixed and fine-tuned edge hover detection and timer logic to ensure smooth, responsive taskbar popups when approaching the bottom screen edge in Auto mode. * **Automated Sync & CI/CD Pipeline:** Fully validated MinGW compilation pipeline with robust library linking (`-ldwmapi`) and streamlined automation for seamless updates.
 
-### 🚀 v1.0.0 — Dawn
+
+### 🚀 v1.0.3 — compilation path for dawn
+- **Feature:** replaced compiler to MinGW.
+
+
+### 🚀 v1.0.2 — patch for dawn
+- **Feature:** fixed auto hide toggle bug.
+
+
+### 🚀 v1.0.1 — Dawn patch01
+-  **Fix:** Fixed taskbar behaver on non maximized window.
+
+
+### 🚀 `v1.0.0` — Dawn (First Stable Release)
 - **Production Release:** Official stable release combining global window scanning, smart auto hover reveal, desktop persistence, popup controls, and registry startup integration.
 - **Global Window Scanning:** Upgraded from single-window tracking to global window enumeration (`EnumWindows`), ensuring taskbar state accurately reflects all background or foreground maximized/fullscreen windows.
 - **Smart Focus & Edge Reveal:** Implemented 3-second temporary taskbar reveals upon window focus/launch and bottom edge hover triggers in Auto mode.
 - **Desktop Override:** Integrated **"Keep Taskbar on Desktop"** logic (`g_keepTaskbarOnDesktop`) that forces taskbar visibility whenever shell desktop surfaces (`Progman` / `WorkerW`) are focused.
 - **Startup Integration:** First-launch prompt adding background persistence via `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`.
-
-#### 🔧 Patch v1.0.3 — Compilation Path for Dawn
-- **Feature:** Replaced compiler pipeline to MinGW.
-
-#### 🔧 Patch v1.0.2 — Patch for Dawn
-- **Feature:** Fixed auto-hide toggle state bug.
-
-#### 🔧 Patch v1.0.1 — Dawn Patch 01
-- **Fix:** Fixed taskbar behavior on non-maximized windows.
 
 ---
 
@@ -59,8 +56,8 @@ A lightweight C++ system tray application that automatically manages your Window
 
 ## How to Build
 
-Compile `autobar.cpp` using any standard C++ compiler linked with Windows API libraries (`user32`, `shell32`, `advapi32`, `dwmapi`):
+Compile `autobar.cpp` using any standard C++ compiler linked with Windows API libraries (`user32`, `shell32`, `advapi32`):
 
 ### Using MinGW (GCC)
 ```bash
-g++ autobar.cpp -o AutoBar.exe -mwindows -lshell32 -luser32 -ladvapi32 -ldwmapi
+g++ autobar.cpp -o AutoBar.exe -mwindows -lshell32 -luser32 -ladvapi32

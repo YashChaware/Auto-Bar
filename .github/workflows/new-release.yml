@@ -1,38 +1,36 @@
-name: Release Pipeline
+name: Interactive Release
 
 on:
   workflow_dispatch:
     inputs:
-      release_type:
-        description: 'Select Release Type (patch: nested sub-release | minor: new top-level version)'
+      release_version:
+        description: 'Release Version Tag (e.g., v1.0.1)'
         required: true
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-      release_name_prefix:
-        description: 'Release Name Codename / Suffix (e.g., Velocity)'
+        default: 'v1.0.1'
+      release_title:
+        description: 'Release Title (e.g., v1.0.1 — Horizon)'
         required: true
-        default: 'Velocity'
+        default: 'v1.0.1 — Horizon'
       release_notes:
-        description: 'Release Notes / Changelog Entries (leave blank to auto-generate from commits)'
-        required: false
+        description: 'Release Notes / Changelog Entries'
+        required: true
         type: string
-        default: ''
+        default: |
+          - **Feature:** Added automated changelog synchronization.
+          - **Fix:** Fixed edge hover timer behavior.
       is_prerelease:
-        description: 'Mark as Pre-Release? (Ignored on Main)'
+        description: 'Mark as Pre-Release?'
         required: true
         type: boolean
         default: false
       is_draft:
-        description: 'Save as Draft? (Ignored on Main if desired)'
+        description: 'Save as Draft?'
         required: true
         type: boolean
         default: false
 
 jobs:
-  manage-release:
+  create-release:
     runs-on: windows-latest
     permissions:
       contents: write
@@ -43,135 +41,35 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect Environment & Auto-Calculate Version
+      - name: Update README.md with New Release Notes
         shell: pwsh
-        run: |
-          $currentBranch = "${{ github.ref_name }}"
-          Write-Host "Current Target Branch: $currentBranch"
-
-          # Determine environment mode
-          $envMode = "production"
-          if ($currentBranch -eq "dev") {
-              $envMode = "dry-run"
-          } elseif ($currentBranch -eq "uat") {
-              $envMode = "uat"
-          }
-          Write-Host "Execution Mode: $envMode"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Fetch tags
-          git fetch --tags
-          
-          # Find latest tag
-          $latestTag = (git describe --tags --abbrev=0 2>$null)
-          if (-not $latestTag) {
-              $latestTag = "v1.0.0"
-          }
-          Write-Host "Latest existing tag detected: $latestTag"
-          
-          # Parse SemVer
-          $cleanTag = $latestTag -replace '^v', ''
-          $parts = $cleanTag.Split('.')
-          [int]$major = $parts[0]
-          [int]$minor = $parts[1]
-          [int]$patch = $parts[2]
-          
-          # Increment based on dropdown selection
-          $releaseType = "${{ inputs.release_type }}"
-          if ($releaseType -eq "minor") {
-              $minor++
-              $patch = 0
-              Write-Host "Performing Minor version bump..."
-          } else {
-              $patch++
-              Write-Host "Performing Patch version bump..."
-          }
-          
-          $newVersion = "v$major.$minor.$patch"
-          $codename = "${{ inputs.release_name_prefix }}"
-          $newTitle = "$newVersion — $codename"
-          
-          # Handle Release Notes
-          $inputNotes = "${{ inputs.release_notes }}"
-          if ([string]::IsNullOrWhiteSpace($inputNotes)) {
-              Write-Host "Auto-generating context from git commit history since $latestTag..."
-              $gitCommits = git log "$latestTag..HEAD" --pretty=format:"- %s" 2>$null
-              if ([string]::IsNullOrWhiteSpace($gitCommits)) {
-                  $notes = "- **Update:** Routine maintenance and stability improvements."
-              } else {
-                  $notes = $gitCommits
-              }
-          } else {
-              $notes = $inputNotes
-          }
-          
-          # Format Markdown structure based on release type hierarchy
-          if ($releaseType -eq "minor") {
-              $readmeEntry = "`n### 🚀 $newTitle`n$notes`n"
-              $releaseBody = "### 🚀 $newTitle`n$notes"
-          } else {
-              $readmeEntry = "`n#### 🔧 Patch $newTitle`n$notes`n"
-              $releaseBody = "#### 🔧 Patch $newTitle`n$notes"
-          }
-
-          # Export variables to GitHub Environment
-          echo "ENV_MODE=$envMode" >> $env:GITHUB_ENV
-          echo "RELEASE_VERSION=$newVersion" >> $env:GITHUB_ENV
-          echo "RELEASE_TITLE=$newTitle" >> $env:GITHUB_ENV
-          echo "RELEASE_TYPE=$releaseType" >> $env:GITHUB_ENV
-
-          "README_ENTRY<<EOF" >> $env:GITHUB_ENV
-          $readmeEntry >> $env:GITHUB_ENV
-          "EOF" >> $env:GITHUB_ENV
-
-          "RELEASE_BODY<<EOF" >> $env:GITHUB_ENV
-          $releaseBody >> $env:GITHUB_ENV
-          "EOF" >> $env:GITHUB_ENV
-
-      - name: Dry-Run Simulation Log (Dev Branch Only)
-        if: env.ENV_MODE == 'dry-run'
-        shell: pwsh
-        run: |
-          Write-Host "========================================="
-          Write-Host "[DRY-RUN SIMULATION] No files changed."
-          Write-Host "Target Version: ${{ env.RELEASE_VERSION }}"
-          Write-Host "Release Title:  ${{ env.RELEASE_TITLE }}"
-          Write-Host "Release Type:   ${{ env.RELEASE_TYPE }}"
-          Write-Host "-----------------------------------------"
-          Write-Host "Generated Changelog Entry for README & Release:"
-          Write-Host "${{ env.README_ENTRY }}"
-          Write-Host "========================================="
-
-      - name: Update README.md Hierarchy (UAT & Main)
-        if: env.ENV_MODE != 'dry-run'
-        shell: pwsh
+        env:
+          RELEASE_TITLE: ${{ inputs.release_title }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
           $readmePath = "README.md"
           $marker = "## Version History & Changelog"
-          $type = "${{ env.RELEASE_TYPE }}"
-          $readmeEntry = "${{ env.README_ENTRY }}"
 
           if (Test-Path $readmePath) {
               $content = Get-Content $readmePath -Raw
 
-              if ($content.Contains($marker)) {
-                  if ($type -eq "minor") {
-                      $updatedContent = $content.Replace("$marker", "$marker`n$readmeEntry")
-                      Write-Host "[SUCCESS] Added new top-level minor version heading to README.md."
-                  } 
-                  else {
-                      if ($content -match '### 🚀') {
-                          $parts = $content -split '### 🚀', 2
-                          $updatedContent = $parts[0] + '### 🚀' + $parts[1].Insert(0, $readmeEntry)
-                          Write-Host "[SUCCESS] Nested patch release under latest minor version in README.md."
-                      } else {
-                          $updatedContent = $content.Replace("$marker", "$marker`n$readmeEntry")
-                      }
-                  }
+              $title = $env:RELEASE_TITLE
+              $notes = $env:RELEASE_NOTES
 
-                  [System.IO.File]::WriteAllText((Get-Item $readmePath).FullName, $updatedContent)
+              $newEntry = "`n### 🚀 $title`n$notes`n"
+
+              if ($content.Contains($marker)) {
+                  $updatedContent = $content.Replace(
+                      $marker,
+                      "$marker`n$newEntry"
+                  )
+
+                  [System.IO.File]::WriteAllText(
+                      (Get-Item $readmePath).FullName,
+                      $updatedContent
+                  )
+
+                  Write-Host "[SUCCESS] README.md successfully updated with new release notes."
               }
               else {
                   Write-Error "[ERROR] Marker '$marker' not found in README.md!"
@@ -183,42 +81,26 @@ jobs:
               exit 1
           }
 
-      - name: Commit and Push Updated README.md (UAT & Main)
-        if: env.ENV_MODE != 'dry-run'
+      - name: Commit and Push Updated README.md
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "docs: update README.md changelog hierarchy for ${{ env.RELEASE_VERSION }} [skip ci]"
+          commit_message: "docs: auto-update README.md changelog for ${{ inputs.release_version }} [skip ci]"
           file_pattern: "README.md"
 
-      - name: Create and Push Git Tag (UAT & Main)
-        if: env.ENV_MODE != 'dry-run'
+      - name: Create and Push Git Tag
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ env.RELEASE_VERSION }}" -m "${{ env.RELEASE_TITLE }}"
-          git push origin "${{ env.RELEASE_VERSION }}"
+          git tag -a "${{ inputs.release_version }}" -m "${{ inputs.release_title }}"
+          git push origin "${{ inputs.release_version }}"
 
-      - name: Publish Staging GitHub Release (UAT Branch)
-        if: env.ENV_MODE == 'uat'
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_VERSION }}
-          name: "[UAT STAGING] ${{ env.RELEASE_TITLE }}"
-          body: ${{ env.RELEASE_BODY }}
-          prerelease: true
-          draft: true
-          files: AutoBar.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish Production GitHub Release (Main Branch)
-        if: env.ENV_MODE == 'production'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_VERSION }}
-          name: ${{ env.RELEASE_TITLE }}
-          body: ${{ env.RELEASE_BODY }}
+          tag_name: ${{ inputs.release_version }}
+          name: ${{ inputs.release_title }}
+          body: ${{ inputs.release_notes }}
           prerelease: ${{ inputs.is_prerelease }}
           draft: ${{ inputs.is_draft }}
           files: AutoBar.exe
